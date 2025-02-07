@@ -1,60 +1,92 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, FlatList, StyleSheet, Button } from "react-native";
-import RNFS from "react-native-fs"; // Import react-native-fs for file system operations
+import { View, Text, FlatList, StyleSheet, Button, Alert } from "react-native";
+import RNFS from "react-native-fs";
 import generateRandomOrders from "../utils/generateOrdersJson";
 import OrderCard from "./OrderCard";
 import SearchBar from "./SearchBar";
 
 const OrdersScreen = ({ navigation }) => {
-  const [orders, setOrders] = useState([]); // Stores all orders
-  const [filteredOrders, setFilteredOrders] = useState([]); // Stores orders after filtering
+  const [orders, setOrders] = useState([]); 
+  const [filteredOrders, setFilteredOrders] = useState([]); 
   const [currentPage, setCurrentPage] = useState(1);
-  const ordersPerPage = 20; // Show 20 orders per page
+  const ordersPerPage = 20;
   const [searchQuery, setSearchQuery] = useState("");
 
-  const ordersFilePath = RNFS.DocumentDirectoryPath + "/orders.json"; // Path to store orders.json
-  console.log("orders.json path:", ordersFilePath); // Log the path for debugging
+  const ordersFilePath = RNFS.DocumentDirectoryPath + "/orders.json";
 
-  // Function to load orders from the file
   const loadOrders = async () => {
     try {
       const fileExists = await RNFS.exists(ordersFilePath);
-      console.log("File exists:", fileExists); // Log if the file exists
-
       let loadedOrders = [];
 
       if (fileExists) {
-        // If the file exists, read the file
         const fileContent = await RNFS.readFile(ordersFilePath, "utf8");
         loadedOrders = JSON.parse(fileContent);
-        console.log("Loaded orders from file:", loadedOrders);
       } else {
-        // If the file doesn't exist, generate random orders and save them
-        console.log("File does not exist. Generating new orders...");
         loadedOrders = generateRandomOrders(2000);
         await RNFS.writeFile(ordersFilePath, JSON.stringify(loadedOrders, null, 2), "utf8");
-        console.log("Generated and saved new orders.");
       }
 
-      setOrders(loadedOrders); // Set the orders to the state
-      setFilteredOrders(loadedOrders); // Update filtered orders as well
+      setOrders(loadedOrders);
+      setFilteredOrders(loadedOrders);
     } catch (error) {
       console.error("Error loading orders from file", error);
     }
   };
 
-  // Load orders when the component mounts
-  useEffect(() => {
-    loadOrders(); // Load orders from file
-  }, []); // Empty dependency array, so this effect runs only once
+  const saveOrdersToFile = async (updatedOrders) => {
+    try {
+      await RNFS.writeFile(ordersFilePath, JSON.stringify(updatedOrders, null, 2), "utf8");
+    } catch (error) {
+      console.error("Error updating orders file", error);
+    }
+  };
 
-  // Handle search query change
+  const handleDeleteOrder = async (orderId) => {
+    Alert.alert("Confirm Delete", "Are you sure you want to delete this order?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", onPress: async () => {
+        const updatedOrders = orders.filter(order => order.orderId !== orderId);
+        setOrders(updatedOrders);
+        setFilteredOrders(updatedOrders);
+        await saveOrdersToFile(updatedOrders);
+      }, style: "destructive" }
+    ]);
+  };
+
+  const handleEditOrder = (order) => {
+    navigation.navigate("OrderForm", {
+      orderData: order,
+      onSave: handleSaveOrder,
+    });
+  };
+
+  const handleSaveOrder = async (newOrder) => {
+    let updatedOrders;
+    const orderIndex = orders.findIndex(order => order.orderId === newOrder.orderId);
+
+    if (orderIndex !== -1) {
+      updatedOrders = [...orders];
+      updatedOrders[orderIndex] = newOrder;
+    } else {
+      updatedOrders = [newOrder, ...orders];
+    }
+
+    setOrders(updatedOrders);
+    setFilteredOrders(updatedOrders);
+    await saveOrdersToFile(updatedOrders);
+  };
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
   const handleSearch = (text) => {
     setSearchQuery(text);
-    setCurrentPage(1); // Reset to the first page when searching
+    setCurrentPage(1);
 
     if (text.trim() === "") {
-      setFilteredOrders(orders); // Reset to full order list if search is empty
+      setFilteredOrders(orders);
     } else {
       setFilteredOrders(
         orders.filter(
@@ -66,76 +98,97 @@ const OrdersScreen = ({ navigation }) => {
     }
   };
 
-  // Calculate total pages
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
-
-  // Get the orders for the current page
   const indexOfLastOrder = currentPage * ordersPerPage;
   const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
   const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
 
-  // Handle adding a new order
-  const handleSaveOrder = (newOrder) => {
-    const updatedOrders = [newOrder, ...orders]; // Add new order at the top
-    setOrders(updatedOrders); // Update full order list
-    setFilteredOrders(updatedOrders); // Update filtered list
+  const formatLargeNumber = (num) => {
+    if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + "B";
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + "M";
+    if (num >= 1_000) return (num / 1_000).toFixed(2) + "K";
+    return num;
   };
+
+  const totalOrderValue = formatLargeNumber(
+    filteredOrders.reduce((sum, order) => sum + order.orderValue, 0)
+  );
 
   return (
     <View style={styles.container}>
+      <View style={styles.totalValueContainer}>
+        <Text style={styles.totalValueText}>Total Order Value: ${totalOrderValue}</Text>
+      </View>
+
       <SearchBar value={searchQuery} onChangeText={handleSearch} />
-      
+
       <FlatList
-        data={currentOrders} // Show only the paginated orders
+        data={currentOrders}
         keyExtractor={(item) => item.orderId}
         renderItem={({ item }) => (
           <View style={styles.orderCardContainer}>
-            <OrderCard order={item} />
+            <OrderCard 
+              order={item} 
+              onDelete={handleDeleteOrder} 
+              onEdit={handleEditOrder} 
+            />
           </View>
         )}
       />
 
-      {/* Pagination Controls */}
       <View style={styles.paginationContainer}>
-        <Button
-          title="Previous"
-          onPress={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-          disabled={currentPage === 1}
-        />
-        <Text style={styles.pageNumber}>
-          Page {currentPage} of {totalPages}
-        </Text>
-        <Button
-          title="Next"
-          onPress={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-          disabled={currentPage >= totalPages}
-        />
+        <Button title="Previous" onPress={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={currentPage === 1} />
+        <Text style={styles.pageNumber}>Page {currentPage} of {totalPages}</Text>
+        <Button title="Next" onPress={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage >= totalPages} />
       </View>
 
-      {/* New Order Button */}
-      <Button
-        title="New Order"
-        onPress={() =>
-          navigation.navigate("OrderForm", {
-            orderData: null, // Pass null for new order
-            onSave: handleSaveOrder, // Pass save function to update state
-          })
-        }
-      />
+      {/* New Order Button with marginTop */}
+      <View style={styles.newOrderButtonContainer}>
+        <Button
+          title="New Order"
+          onPress={() =>
+            navigation.navigate("OrderForm", {
+              orderData: null,
+              onSave: handleSaveOrder,
+            })
+          }
+        />
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
+  
+  totalValueContainer: {
+    backgroundColor: "#4CAF50",
+    padding: 10,
+    marginBottom: 10,
+    borderRadius: 5,
+    alignItems: "center",
+  },
+
+  totalValueText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
   orderCardContainer: { marginBottom: 10 },
+
   paginationContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 10,
   },
+
   pageNumber: { marginHorizontal: 10, fontSize: 16 },
+
+  newOrderButtonContainer: {
+    marginTop: 20, // Add margin to separate from pagination buttons
+  },
 });
 
 export default OrdersScreen;
