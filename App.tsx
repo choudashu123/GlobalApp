@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import AuthScreen from './android/app/src/components/AuthScreen';
 import HomeScreen from './android/app/src/components/HomeScreen';
+import OrderForm from './android/app/src/components/OrderForm';
 import auth from '@react-native-firebase/auth';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -27,6 +28,8 @@ return (
             {({ navigation }) => <HomeScreen user={user} onLogout={handleLogout} navigation={navigation} />}
           </Stack.Screen>
           <Stack.Screen name="Orders" component={OrdersScreen} />
+          <Stack.Screen name="OrderForm" component={OrderForm} />
+
         </>
       ) : (
         <Stack.Screen name="Auth">

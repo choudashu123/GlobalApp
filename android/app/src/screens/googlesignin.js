@@ -96,3 +96,98 @@
 // });
 
 // export default App;
+import React, { useState, useEffect } from "react";
+import { View, Text, FlatList, StyleSheet, Button } from "react-native";
+import generateRandomOrders from "../utils/generateOrders";
+import OrderCard from "./OrderCard";
+import SearchBar from "./SearchBar";
+
+const OrdersScreen = ({ navigation }) => {
+  const [orders, setOrders] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ordersPerPage = 20; // Show 20 orders per page
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Generate 2,000 random orders when the component mounts
+  useEffect(() => {
+    setOrders(generateRandomOrders(2000));
+  }, []);
+
+  // Handle search query change
+  const handleSearch = (text) => {
+    setSearchQuery(text);
+    setCurrentPage(1); // Reset to the first page when searching
+  };
+
+  // Filter orders based on search query
+  const filteredOrders = orders.filter(
+    (order) =>
+      order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.product.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Calculate total pages
+  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
+
+  // Get the orders for the current page
+  const indexOfLastOrder = currentPage * ordersPerPage;
+  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+
+  return (
+    <View style={styles.container}>
+      <SearchBar value={searchQuery} onChangeText={handleSearch} />
+      
+      <FlatList
+        data={currentOrders} // Show only the paginated orders
+        keyExtractor={(item) => item.orderId}
+        renderItem={({ item }) => (
+          <View style={styles.orderCardContainer}>
+            <OrderCard order={item} />
+          </View>
+        )}
+      />
+
+      {/* Pagination Controls */}
+      <View style={styles.paginationContainer}>
+        <Button 
+          title="Previous" 
+          onPress={() => setCurrentPage((prev) => Math.max(1, prev - 1))} 
+          disabled={currentPage === 1} 
+        />
+        <Text style={styles.pageNumber}>
+          Page {currentPage} of {totalPages}
+        </Text>
+        <Button 
+          title="Next" 
+          onPress={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} 
+          disabled={currentPage >= totalPages} 
+        />
+      </View>
+
+      {/* New Order Button */}
+      <Button
+        title="New Order"
+        onPress={() =>
+          navigation.navigate("OrderForm", {
+            orderData: null, // Pass null for new order
+          })
+        }
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20 },
+  orderCardContainer: { marginBottom: 10 },
+  paginationContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  pageNumber: { marginHorizontal: 10, fontSize: 16 },
+});
+
+export default OrdersScreen;
